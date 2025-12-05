@@ -11,7 +11,7 @@ import time
 
 # --- Configuration ---
 DEFAULT_SHEET_ID = "1_fICV_W3ru3zm4aAO6rU8zSXIw7dchD9tKD3JcFpF1k"
-DEFAULT_VIDEO_COLUMN_NAME = "Video URL"
+DEFAULT_VIDEO_COLUMN_NAME = "videoUrl"
 
 # Define the scope for Google Sheets API
 SCOPES = [
