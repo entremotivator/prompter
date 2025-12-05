@@ -1044,7 +1044,7 @@ else:
     # Landing page when no file is uploaded
     st.markdown(""
     <div style='text-align: center; padding: 50px 20px;'>
-        <h2 style='color: #667eea;'>🚀 Welcome!</h2>
+        <h2 style='color: #667eea;'>Welcome!</h2>
         <p style='font-size: 1.1rem; color: #666; margin: 20px 0;'>
             Get started by uploading your Google Service Account JSON file in the sidebar.
         </p>
