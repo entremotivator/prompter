@@ -1042,7 +1042,7 @@ if uploaded_file is not None:
 
 else:
     # Landing page when no file is uploaded
-    st.markdown("""
+    st.markdown(""
     <div style='text-align: center; padding: 50px 20px;'>
         <h2 style='color: #667eea;'>🚀 Welcome!</h2>
         <p style='font-size: 1.1rem; color: #666; margin: 20px 0;'>
@@ -1057,7 +1057,7 @@ else:
     st.markdown("## 📚 Quick Setup Guide")
     
     with st.expander("**Step 1: Create a Google Service Account** 🔑", expanded=True):
-        st.markdown("""
+        st.markdown(""
         1. Go to [Google Cloud Console](https://console.cloud.google.com/)
         2. Create a new project or select an existing one
         3. Enable the **Google Sheets API** and **Google Drive API**
@@ -1071,7 +1071,7 @@ else:
         """)
     
     with st.expander("**Step 2: Share Your Google Sheet** 📊"):
-        st.markdown("""
+        st.markdown(""
         1. Open your Google Sheet
         2. Click the **Share** button (top right)
         3. Share it with the email address from your service account JSON file
@@ -1082,7 +1082,7 @@ else:
         """)
     
     with st.expander("**Step 3: Get Your Sheet ID** 🆔"):
-        st.markdown("""
+        st.markdown(""
         Your Google Sheet ID is in the URL:
         
         ```
@@ -1093,7 +1093,7 @@ else:
         """)
     
     with st.expander("**Step 4: Upload and Configure** ⚙️"):
-        st.markdown("""
+        st.markdown(""
         1. Upload your service account JSON file using the sidebar uploader
         2. Enter your Sheet ID in the configuration section
         3. Specify the column name that contains video URLs
@@ -1140,7 +1140,7 @@ else:
 
 # --- Sidebar Footer ---
 st.sidebar.markdown("---")
-st.sidebar.markdown("""
+st.sidebar.markdown(""
 <div style='text-align: center; padding: 15px; background-color: rgba(255,255,255,0.2); border-radius: 10px;'>
     <p style='margin: 5px 0; font-size: 0.9rem;'><strong>📺 VLIVE Sheets Viewer</strong></p>
     <p style='margin: 5px 0; font-size: 0.8rem;'>Version 2.0</p>
@@ -1150,7 +1150,7 @@ st.sidebar.markdown("""
 
 # Help section in sidebar
 with st.sidebar.expander("❓ Need Help?"):
-    st.markdown("""
+    st.markdown(""
     **Common Issues:**
     
     - **Authentication fails**: Check JSON file format
