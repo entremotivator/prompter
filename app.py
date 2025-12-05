@@ -2,6 +2,7 @@ import streamlit as st
 import gspread
 import pandas as pd
 import json
+import requests
 from io import StringIO
 from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound
 
@@ -63,7 +64,7 @@ CUSTOM_CSS = """
         border-radius: 5px;
     }
     
-    /* Button styling (if any were used) */
+    /* Button styling */
     .stButton>button {
         background-color: #4da6ff;
         color: white;
@@ -92,7 +93,7 @@ CUSTOM_CSS = """
 """
 
 st.set_page_config(
-    page_title="Enhanced VLIVE Google Sheets Viewer",
+    page_title="Enhanced VLIVE Google Sheets Viewer & Form",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -100,8 +101,8 @@ st.set_page_config(
 # Inject custom CSS
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-st.title("📺 Enhanced VLIVE Google Sheets Data Viewer")
-st.markdown("### A dynamic and colorful application to view data from Google Sheets and embed video links.")
+st.title("📺 Enhanced VLIVE Google Sheets Data Viewer & Form")
+st.markdown("### A dynamic and colorful application to view data from Google Sheets, embed video links, and submit new data.")
 
 # --- Authentication in Sidebar ---
 st.sidebar.header("🔑 Google Sheets Authentication")
@@ -124,24 +125,28 @@ video_col_name = st.sidebar.text_input(
     help="The exact name of the column containing the video URLs."
 )
 
+st.sidebar.header("🔗 Webhook Configuration")
+webhook_url = st.sidebar.text_input(
+    "Webhook URL (Optional)",
+    placeholder="e.g., https://your.webhook.site/endpoint",
+    help="URL to send form data to upon submission."
+)
+
 @st.cache_resource(ttl=3600)
 def get_gspread_client(service_account_info):
     """Authenticates gspread using the service account info."""
     try:
-        # gspread.service_account_info expects a dictionary
-        gc = gspread.service_account_info(info=service_account_info)
+        gc = gspread.service_account_from_dict(service_account_info)
         return gc
     except Exception as e:
-        st.error(f"Authentication failed. Please check your JSON file format. Error: {e}")
+        st.error(f"Authentication failed. Please check your JSON file format and ensure the service account has access. Error: {e}")
         return None
 
 @st.cache_data(ttl=600)
 def load_data(gc, sheet_id, worksheet_name):
     """Loads data from the specified worksheet of the Google Sheet."""
     try:
-        # Open the sheet by ID
         sh = gc.open_by_key(sheet_id)
-        # Open the specified worksheet
         worksheet = sh.worksheet(worksheet_name)
         data = worksheet.get_all_records()
         df = pd.DataFrame(data)
@@ -156,6 +161,7 @@ def load_data(gc, sheet_id, worksheet_name):
         st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
+# --- Main Application Logic ---
 if uploaded_file is not None:
     # Read the uploaded JSON file content
     try:
@@ -187,74 +193,140 @@ if uploaded_file is not None:
             st.error(f"Could not retrieve worksheet list. Error: {e}")
             st.stop()
 
-        # Load data
-        df = load_data(gc, sheet_id, selected_worksheet)
-        
-        if not df.empty:
-            st.header(f"📊 Data from Worksheet: **{selected_worksheet}**")
+        # --- Tabs for Viewer and Form ---
+        viewer_tab, form_tab = st.tabs(["👁️ Data Viewer", "📝 Data Submission Form"])
+
+        # --- Data Viewer Tab ---
+        with viewer_tab:
+            df = load_data(gc, sheet_id, selected_worksheet)
             
-            # --- Data Filtering ---
-            search_term = st.text_input("🔍 Search Data", help="Enter text to filter the table and videos.", placeholder="Search by title, description, or any column...")
-            
-            if search_term:
-                # Filter by checking if the search term is in any column (case-insensitive)
-                df_filtered = df[df.apply(lambda row: row.astype(str).str.contains(search_term, case=False).any(), axis=1)]
-            else:
-                df_filtered = df
-            
-            st.subheader(f"Displaying {len(df_filtered)} of {len(df)} Records")
-            st.dataframe(df_filtered, use_container_width=True)
-            
-            # --- Video Embedding ---
-            st.header("🎬 Embedded Videos")
-            
-            if video_col_name in df_filtered.columns:
-                # Filter out rows where the video link is empty or invalid
-                video_data = df_filtered[df_filtered[video_col_name].astype(str).str.startswith('http')].reset_index(drop=True)
+            if not df.empty:
+                st.header(f"📊 Data from Worksheet: **{selected_worksheet}**")
                 
-                if not video_data.empty:
-                    st.info(f"Found and displaying **{len(video_data)}** video(s) matching your criteria.")
-                    
-                    # Use columns for a better layout
-                    # Create a container for the videos to ensure they are visually grouped
-                    video_container = st.container()
-                    
-                    with video_container:
-                        cols = st.columns(2)
-                        
-                        for index, row in video_data.iterrows():
-                            # Determine which column to place the video in
-                            col = cols[index % 2]
-                            
-                            with col:
-                                # Try to find a suitable title/description column
-                                other_cols = [c for c in df_filtered.columns if c != video_col_name]
-                                title_text = f"Record {row.name + 1}"
-                                
-                                # Use the first non-video column as the title if available
-                                if other_cols:
-                                    title_text = str(row[other_cols[0]])
-                                
-                                st.subheader(f"🎥 {title_text}")
-                                
-                                # Display other relevant data in a compact format
-                                with st.expander("View Details"):
-                                    for c in other_cols:
-                                        st.markdown(f"**{c}:** {row[c]}")
-                                
-                                # Use st.video to embed the video
-                                st.video(row[video_col_name])
-                                
-                                st.markdown("---")
+                # --- Data Filtering ---
+                search_term = st.text_input("🔍 Search Data", help="Enter text to filter the table and videos.", placeholder="Search by title, description, or any column...")
+                
+                if search_term:
+                    df_filtered = df[df.apply(lambda row: row.astype(str).str.contains(search_term, case=False).any(), axis=1)]
                 else:
-                    st.warning(f"⚠️ No valid video links found in the column **'{video_col_name}'** in the filtered data.")
+                    df_filtered = df
+                
+                st.subheader(f"Displaying {len(df_filtered)} of {len(df)} Records")
+                st.dataframe(df_filtered, use_container_width=True)
+                
+                # --- Video Embedding ---
+                st.header("🎬 Embedded Videos")
+                
+                if video_col_name in df_filtered.columns:
+                    video_data = df_filtered[df_filtered[video_col_name].astype(str).str.startswith('http')].reset_index(drop=True)
+                    
+                    if not video_data.empty:
+                        st.info(f"Found and displaying **{len(video_data)}** video(s) matching your criteria.")
+                        
+                        video_container = st.container()
+                        
+                        with video_container:
+                            cols = st.columns(2)
+                            
+                            for index, row in video_data.iterrows():
+                                col = cols[index % 2]
+                                
+                                with col:
+                                    other_cols = [c for c in df_filtered.columns if c != video_col_name]
+                                    title_text = f"Record {row.name + 1}"
+                                    
+                                    if other_cols:
+                                        title_text = str(row[other_cols[0]])
+                                    
+                                    st.subheader(f"🎥 {title_text}")
+                                    
+                                    with st.expander("View Details"):
+                                        for c in other_cols:
+                                            st.markdown(f"**{c}:** {row[c]}")
+                                    
+                                    st.video(row[video_col_name])
+                                    st.markdown("---")
+                    else:
+                        st.warning(f"⚠️ No valid video links found in the column **'{video_col_name}'** in the filtered data.")
+                else:
+                    st.error(f"❌ Could not find the configured video column **'{video_col_name}'**. Please check the configuration in the sidebar.")
+                    st.info(f"Available columns: {', '.join(df_filtered.columns)}")
             else:
-                st.error(f"❌ Could not find the configured video column **'{video_col_name}'**. Please check the configuration in the sidebar.")
-                st.info(f"Available columns: {', '.join(df_filtered.columns)}")
-        else:
-            st.warning("⚠️ The DataFrame is empty after loading or filtering. Please check the sheet content and service account permissions.")
-else:
-    st.info("⬆️ Please upload your Google Service Account JSON file in the sidebar to connect to the Google Sheet.")
+                st.warning("⚠️ The DataFrame is empty after loading or filtering. Please check the sheet content and service account permissions.")
+
+        # --- Data Submission Form Tab ---
+        with form_tab:
+            st.header("📝 Submit New Data")
+            st.markdown("Use this form to submit new video links and data to your Google Sheet and/or a webhook.")
+
+            with st.form("data_submission_form"):
+                # Form fields - adjust these to match your expected sheet columns
+                title = st.text_input("Title / Description (Column 1)", max_chars=100)
+                video_url_input = st.text_input("Video URL (Required)", placeholder="https://cdn.pipio.ai/...", key="video_url_form")
+                additional_data = st.text_area("Additional Data (Column 3+)", help="Enter any other data you want to submit.")
+                
+                # Submission options
+                submit_to_sheet = st.checkbox(f"Append to Google Sheet: **{selected_worksheet}**", value=True)
+                submit_to_webhook = st.checkbox("Send to Webhook", value=False, disabled=(not webhook_url))
+                
+                submitted = st.form_submit_button("Submit Data", type="primary")
+
+                if submitted:
+                    if not video_url_input:
+                        st.error("The Video URL field is required.")
+                    else:
+                        data_to_submit = {
+                            "Title": title,
+                            video_col_name: video_url_input,
+                            "Additional_Data": additional_data,
+                            "Timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        
+                        success = True
+                        
+                        # 1. Append to Google Sheet
+                        if submit_to_sheet:
+                            try:
+                                sh = gc.open_by_key(sheet_id)
+                                worksheet = sh.worksheet(selected_worksheet)
+                                
+                                # Prepare data as a list of values
+                                # NOTE: This assumes the sheet has columns in the order: Title, Video URL, Additional_Data, Timestamp
+                                # You may need to adjust this list based on your actual sheet structure.
+                                values = [
+                                    data_to_submit["Title"],
+                                    data_to_submit[video_col_name],
+                                    data_to_submit["Additional_Data"],
+                                    data_to_submit["Timestamp"]
+                                ]
+                                
+                                worksheet.append_row(values)
+                                st.success(f"✅ Successfully appended data to Google Sheet: **{selected_worksheet}**")
+                                
+                                # Clear the data cache so the viewer tab can load the new data
+                                st.cache_data.clear()
+                            except Exception as e:
+                                st.error(f"❌ Failed to append data to Google Sheet. Error: {e}")
+                                success = False
+
+                        # 2. Send to Webhook
+                        if submit_to_webhook and webhook_url:
+                            try:
+                                response = requests.post(webhook_url, json=data_to_submit, timeout=5)
+                                if response.status_code == 200:
+                                    st.success(f"✅ Successfully sent data to webhook: **{webhook_url}**")
+                                else:
+                                    st.warning(f"⚠️ Webhook received data but returned status code: {response.status_code}")
+                            except requests.exceptions.RequestException as e:
+                                st.error(f"❌ Failed to send data to webhook. Error: {e}")
+                                success = False
+                        elif submit_to_webhook and not webhook_url:
+                            st.warning("⚠️ Cannot send to webhook: Webhook URL is not configured in the sidebar.")
+                            success = False
+                            
+                        if success:
+                            st.balloons()
+                            st.experimental_rerun() # Rerun to clear form and update viewer tab
 
 # --- Instructions for the user ---
 st.sidebar.markdown("""
@@ -263,7 +335,6 @@ st.sidebar.markdown("""
 
 1.  **Get Service Account Key:** Create a Google Service Account and download the JSON key file.
 2.  **Share Sheet:** Share your Google Sheet with the email address found in the `client_email` field of the JSON key file.
-3.  **Upload & Configure:** Upload the JSON file and enter the correct **Google Sheet ID** and **Video Link Column Name** in the sidebar.
-4.  **Select Tab:** Choose the worksheet (tab) you want to view from the dropdown.
+3.  **Upload & Configure:** Upload the JSON file and enter the correct **Google Sheet ID**, **Video Link Column Name**, and optionally a **Webhook URL** in the sidebar.
+4.  **Select Tab:** Use the tabs to switch between the **Data Viewer** and the **Data Submission Form**.
 """)
-
